@@ -1,0 +1,8 @@
+<resources>
+
+    <style name="AppTheme2" parent="AppTheme">
+        <!--Navigation bar color-->
+        <item name="android:navigationBarColor">@android:color/black</item>
+    </style>
+
+</resources>
