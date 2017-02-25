@@ -3,8 +3,6 @@ package com.android.example.popularmovie;
 import android.app.Activity;
 import android.app.Fragment;
 import android.content.Context;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Bundle;
@@ -18,24 +16,28 @@ import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.GridView;
 import android.widget.ImageView;
 import android.widget.Toast;
 
+import com.android.example.popularmovie.entity.ResultsBean;
 import com.android.example.popularmovie.netutil.DownloadCallback;
 import com.android.example.popularmovie.netutil.DownloadUtil;
 import com.android.example.popularmovie.netutil.Result;
-import com.android.example.popularmovie.util.DisplayUtil;
+import com.google.gson.Gson;
+import com.squareup.picasso.Picasso;
 
 import java.io.IOException;
+import java.net.SocketTimeoutException;
 import java.net.URL;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 public class MainActivity extends AppCompatActivity {
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -69,9 +71,7 @@ public class MainActivity extends AppCompatActivity {
             return;
         toolbar.setTitle(getTitle());
 
-
         setSupportActionBar(toolbar);
-
     }
 
     @Override
@@ -83,12 +83,8 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
-        // Handle action bar item clicks here. The action bar will
-        // automatically handle clicks on the Home/Up button, so long
-        // as you specify a parent activity in AndroidManifest.xml.
         final int id = item.getItemId();
 
-        //noinspection SimplifiableIfStatement
         if (id == R.id.action_settings) {
             //startActivity(new Intent(this, SettingsActivity.class));
             return true;
@@ -96,7 +92,7 @@ public class MainActivity extends AppCompatActivity {
         return super.onOptionsItemSelected(item);
     }
 
-    public static class FilmDisplayFragment extends Fragment implements DownloadCallback<String>{
+    public static class FilmDisplayFragment extends Fragment implements DownloadCallback<String> {
 
         public static final String TAG = FilmDisplayFragment.class.getSimpleName();
 
@@ -109,13 +105,15 @@ public class MainActivity extends AppCompatActivity {
          */
         private boolean mDownloading = false;
 
+        private final Gson gson = new Gson();
+
         private String mUrlString;
 
         private FetchMovieTask mTask;
 
         private Activity mActivity;
 
-        private ArrayAdapter<Integer> mAdapter;
+        private ArrayAdapter<ResultsBean.FilmBean> mAdapter;
 
         public FilmDisplayFragment() {
         }
@@ -132,13 +130,14 @@ public class MainActivity extends AppCompatActivity {
             mActivity = getActivity();
 
             //TODO test
-            mUrlString = Constant.MOVIE_POPULAR;
+            mUrlString = Constant.TOP_RATED;
 
             // Add this line in order for this fragment to handle menu events.
             setHasOptionsMenu(true);
 
             // Retain this Fragment across configuration changes in the host Activity.
             setRetainInstance(true);
+
         }
 
         @Override
@@ -147,20 +146,29 @@ public class MainActivity extends AppCompatActivity {
             View rootView = inflater.inflate(R.layout.fragment_film_display, container, false);
             GridView gridView = (GridView) rootView;
 
-            final Integer[] data = {R.mipmap.ic_launcher, R.mipmap.ic_launcher, R.mipmap.ic_launcher
-                    , R.mipmap.ic_launcher, R.mipmap.ic_launcher, R.mipmap.ic_launcher
-                    , R.mipmap.ic_launcher, R.mipmap.ic_launcher, R.mipmap.ic_launcher};
-            mAdapter = new FilmAdapter(mActivity, new ArrayList<>(Arrays.asList(data)));
+            mAdapter = new InnerGridViewAdapter(mActivity);
 
             gridView.setAdapter(mAdapter);
-            gridView.setOnItemClickListener(null);
+            gridView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
+                @Override
+                public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
+                    DetailActivity.startActivity(mActivity, mAdapter.getItem(position));
+                }
+            });
+            gridView.setOnScrollListener(new PicassoScrollListener(mActivity));
             return rootView;
+        }
+
+        @Override
+        public void onViewCreated(View view, Bundle savedInstanceState) {
+            super.onViewCreated(view, savedInstanceState);
+            this.updateMovieInfo();
         }
 
         @Override
         public void onStart() {
             super.onStart();
-            //this.updateWeather();
+            //this.updateMovieInfo();
         }
 
         @Override
@@ -188,12 +196,15 @@ public class MainActivity extends AppCompatActivity {
 
         @Override
         public void onSuccess(String result) {
-            Toast.makeText(mActivity, result, Toast.LENGTH_SHORT).show();
             // Update your UI here based on result of download.
-//                // New data is back from the server.  Hooray!
-//                if (result != null) {
-//                    mAdapter.clear();
-//                    //mAdapter.addAll(result);
+            // New data is back from the server.
+            if (result != null) {
+                ResultsBean resultsBean = gson.fromJson(result, ResultsBean.class);
+
+                List<ResultsBean.FilmBean> filmList = resultsBean.getResults();
+                mAdapter.clear();
+                mAdapter.addAll(filmList);
+            }
         }
 
         @Override
@@ -234,45 +245,35 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-        class FilmAdapter extends ArrayAdapter<Integer> {
+        class InnerGridViewAdapter extends ArrayAdapter<ResultsBean.FilmBean> {
 
-            private final int IMAGE_WIDTH;
+            final Context context;
 
-            FilmAdapter(Context context, List<Integer> list) {
-                super(context, 0, list);
-
-                //获取屏幕宽度
-                IMAGE_WIDTH = DisplayUtil.getScreenWidth(mActivity) / 2;
+            InnerGridViewAdapter(Context context) {
+                super(context, 0, new ArrayList<ResultsBean.FilmBean>(20));
+                this.context = context;
             }
 
             @NonNull
             @Override
             public View getView(int position, View convertView, @NonNull ViewGroup parent) {
-                final Integer item = getItem(position);
-                ImageView imageView;
+                ImageView imageView = (ImageView) convertView;
+                ;
                 if (convertView == null) {
                     // if it's not recycled, initialize some attributes
-                    imageView = new ImageView(mActivity);
-
-                    //获取原始图片的宽和高
-                    BitmapFactory.Options options = new BitmapFactory.Options();
-                    options.inJustDecodeBounds = true;
-                    Bitmap bitmap = BitmapFactory.decodeResource(mActivity.getResources(), item);
-                    int w = bitmap.getWidth();
-                    int h = bitmap.getHeight();
-
-                    final int realHeight = IMAGE_WIDTH * h / w;
-
-                    imageView.setLayoutParams(new GridView.LayoutParams(IMAGE_WIDTH, realHeight));
+                    imageView = new ImageView(context);
                     imageView.setScaleType(ImageView.ScaleType.CENTER_CROP);
-                } else {
-                    imageView = (ImageView) convertView;
                 }
 
-                if (item != null){
-                    //TODO 需要处理, 判断是否进行缩放后再set
-                    imageView.setImageResource(item);
-                }
+                // Get the image URL for the current position.
+                final ResultsBean.FilmBean item = getItem(position);
+
+                // Trigger the download of the URL asynchronously into the image view.
+                Picasso.with(mActivity)
+                        .load(Constant.IMAGE_BASE_URL.concat(item.backdropPath))
+                        .placeholder(R.drawable.placeholder)
+                        .tag(context)
+                        .into(imageView);
 
                 return imageView;
             }
@@ -308,6 +309,7 @@ public class MainActivity extends AppCompatActivity {
                         result = new Result(e);
                     }
                 }
+
                 return result;
             }
 
@@ -316,10 +318,12 @@ public class MainActivity extends AppCompatActivity {
                 if (result != null) {
                     if (result.mException != null) {
                         final String errorMsg;
-                        if(result.mException instanceof UnknownHostException){
-                            errorMsg = "与主机失去联系, 请检查网络";
-                        }else {
-                            errorMsg = result.mException.getMessage();
+                        if (result.mException instanceof UnknownHostException) {
+                            errorMsg = "与主机失联, 请检查网络";
+                        } else if (result.mException instanceof SocketTimeoutException) {
+                            errorMsg = "连接超时, 请检查网络";
+                        } else {
+                            errorMsg = "网络连接失败, 请检查网络";
                         }
                         FilmDisplayFragment.this.onError(errorMsg);
                     } else if (result.mResultValue != null) {
@@ -331,7 +335,6 @@ public class MainActivity extends AppCompatActivity {
 
         }
     }
-
 
 }
 

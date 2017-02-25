@@ -30,10 +30,10 @@ public final class DownloadUtil {
 
         try {
             conn = (HttpURLConnection) url.openConnection();
-            // Timeout for reading InputStream arbitrarily set to 3000ms.
-            conn.setReadTimeout(3000);
-            // Timeout for connection.connect() arbitrarily set to 3000ms.
-            conn.setConnectTimeout(3000);
+            // Timeout for reading InputStream arbitrarily set to 5000ms.
+            conn.setReadTimeout(5000);
+            // Timeout for connection.connect() arbitrarily set to 5000ms.
+            conn.setConnectTimeout(5000);
             // For this use case, set HTTP method to GET.
             conn.setRequestMethod("GET");
             // Already true by default but setting just in case; needs to be true since this request
