@@ -5,6 +5,8 @@ import android.app.Fragment;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.net.Uri;
+import android.os.AsyncTask;
 import android.os.Bundle;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
@@ -19,9 +21,16 @@ import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
 import android.widget.GridView;
 import android.widget.ImageView;
+import android.widget.Toast;
 
+import com.android.example.popularmovie.netutil.DownloadCallback;
+import com.android.example.popularmovie.netutil.DownloadUtil;
+import com.android.example.popularmovie.netutil.Result;
 import com.android.example.popularmovie.util.DisplayUtil;
 
+import java.io.IOException;
+import java.net.URL;
+import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -33,15 +42,36 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        if (savedInstanceState == null) {
-            getFragmentManager().beginTransaction().add(R.id.container, FilmDisplayFragment.newInstance()).commit();
+
+        // Check that the activity is using the layout version with
+        // the fragment_container FrameLayout
+        if (findViewById(R.id.container) != null) {
+
+            // However, if we're being restored from a previous state,
+            // then we don't need to do anything and should return or else
+            // we could end up with overlapping fragments.
+            if (savedInstanceState != null) {
+                return;
+            }
+            // Create a new Fragment to be placed in the activity layout
+            FilmDisplayFragment filmDisplayFragment = FilmDisplayFragment.newInstance();
+            // In case this activity was started with special instructions from an
+            // Intent, pass the Intent's extras to the fragment as arguments
+            //firstFragment.setArguments(getIntent().getExtras());
+
+            // Add the fragment to the 'fragment_container' FrameLayout
+            getFragmentManager().beginTransaction()
+                    .add(R.id.container, filmDisplayFragment).commit();
         }
 
         final Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
         if (toolbar == null)
             return;
         toolbar.setTitle(getTitle());
+
+
         setSupportActionBar(toolbar);
+
     }
 
     @Override
@@ -66,15 +96,34 @@ public class MainActivity extends AppCompatActivity {
         return super.onOptionsItemSelected(item);
     }
 
-    public static class FilmDisplayFragment extends Fragment {
+    public static class FilmDisplayFragment extends Fragment implements DownloadCallback<String>{
+
+        public static final String TAG = FilmDisplayFragment.class.getSimpleName();
 
         public static FilmDisplayFragment newInstance() {
             return new FilmDisplayFragment();
         }
 
+        /**
+         * Boolean telling us whether a download is in progress
+         */
+        private boolean mDownloading = false;
+
+        private String mUrlString;
+
+        private FetchMovieTask mTask;
+
         private Activity mActivity;
 
+        private ArrayAdapter<Integer> mAdapter;
+
         public FilmDisplayFragment() {
+        }
+
+
+        @Override
+        public void onAttach(Context context) {
+            super.onAttach(context);
         }
 
         @Override
@@ -82,8 +131,14 @@ public class MainActivity extends AppCompatActivity {
             super.onCreate(savedInstanceState);
             mActivity = getActivity();
 
+            //TODO test
+            mUrlString = Constant.MOVIE_POPULAR;
+
             // Add this line in order for this fragment to handle menu events.
             setHasOptionsMenu(true);
+
+            // Retain this Fragment across configuration changes in the host Activity.
+            setRetainInstance(true);
         }
 
         @Override
@@ -95,11 +150,23 @@ public class MainActivity extends AppCompatActivity {
             final Integer[] data = {R.mipmap.ic_launcher, R.mipmap.ic_launcher, R.mipmap.ic_launcher
                     , R.mipmap.ic_launcher, R.mipmap.ic_launcher, R.mipmap.ic_launcher
                     , R.mipmap.ic_launcher, R.mipmap.ic_launcher, R.mipmap.ic_launcher};
-            final ArrayAdapter<Integer> adapter = new FilmAdapter(mActivity, new ArrayList<>(Arrays.asList(data)));
+            mAdapter = new FilmAdapter(mActivity, new ArrayList<>(Arrays.asList(data)));
 
-            gridView.setAdapter(adapter);
+            gridView.setAdapter(mAdapter);
             gridView.setOnItemClickListener(null);
             return rootView;
+        }
+
+        @Override
+        public void onStart() {
+            super.onStart();
+            //this.updateWeather();
+        }
+
+        @Override
+        public void onDestroy() {
+            this.cancelDownload();
+            super.onDestroy();
         }
 
         @Override
@@ -112,14 +179,59 @@ public class MainActivity extends AppCompatActivity {
             final int id = item.getItemId();
 
             if (id == R.id.action_refresh) {
-                this.updateFilmInfo();
+                this.updateMovieInfo();
                 return true;
             }
             return super.onOptionsItemSelected(item);
         }
 
-        private void updateFilmInfo() {
 
+        @Override
+        public void onSuccess(String result) {
+            Toast.makeText(mActivity, result, Toast.LENGTH_SHORT).show();
+            // Update your UI here based on result of download.
+//                // New data is back from the server.  Hooray!
+//                if (result != null) {
+//                    mAdapter.clear();
+//                    //mAdapter.addAll(result);
+        }
+
+        @Override
+        public void onError(String errorString) {
+            Toast.makeText(mActivity, errorString, Toast.LENGTH_SHORT).show();
+        }
+
+        @Override
+        public void finishDownloading() {
+            mDownloading = false;
+            this.cancelDownload();
+
+        }
+
+        public void updateMovieInfo() {
+            if (!mDownloading) {
+                // Execute the async download.
+                this.startDownload();
+                mDownloading = true;
+            }
+        }
+
+        /**
+         * Start non-blocking execution of DownloadTask.
+         */
+        private void startDownload() {
+            this.cancelDownload();
+            mTask = new FetchMovieTask();
+            mTask.execute(mUrlString);
+        }
+
+        /**
+         * Cancel (and interrupt if necessary) any ongoing DownloadTask execution.
+         */
+        private void cancelDownload() {
+            if (mTask != null) {
+                mTask.cancel(true);
+            }
         }
 
         class FilmAdapter extends ArrayAdapter<Integer> {
@@ -157,9 +269,64 @@ public class MainActivity extends AppCompatActivity {
                     imageView = (ImageView) convertView;
                 }
 
-                if (item != null)
+                if (item != null){
+                    //TODO 需要处理, 判断是否进行缩放后再set
                     imageView.setImageResource(item);
+                }
+
                 return imageView;
+            }
+
+        }
+
+        class FetchMovieTask extends AsyncTask<String, Void, Result> {
+
+            /**
+             * Defines work to perform on the background thread.
+             */
+            @Override
+            protected Result doInBackground(String... urls) {
+                Result result = null;
+                if (!super.isCancelled() && urls != null && urls.length > 0) {
+                    final String urlString = urls[0];
+
+                    Uri builtUri = Uri.parse(urlString)
+                            .buildUpon()
+                            .appendQueryParameter("api_key", BuildConfig.THEMOVIEDB_API_KEY)
+                            .build();
+
+                    try {
+                        final URL url = new URL(builtUri.toString());
+                        String resultString = DownloadUtil.download(url);
+                        if (resultString != null) {
+                            result = new Result(resultString);
+                        } else {
+                            //重新包装后抛出
+                            throw new IOException("No response received.");
+                        }
+                    } catch (IOException e) {
+                        result = new Result(e);
+                    }
+                }
+                return result;
+            }
+
+            @Override
+            protected void onPostExecute(Result result) {
+                if (result != null) {
+                    if (result.mException != null) {
+                        final String errorMsg;
+                        if(result.mException instanceof UnknownHostException){
+                            errorMsg = "与主机失去联系, 请检查网络";
+                        }else {
+                            errorMsg = result.mException.getMessage();
+                        }
+                        FilmDisplayFragment.this.onError(errorMsg);
+                    } else if (result.mResultValue != null) {
+                        FilmDisplayFragment.this.onSuccess(result.mResultValue);
+                    }
+                    FilmDisplayFragment.this.finishDownloading();
+                }
             }
 
         }
