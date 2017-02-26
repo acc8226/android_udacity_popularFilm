@@ -1,0 +1,6 @@
+<resources>
+    <string-array name="movie_sort_array">
+        <item>@string/movie_popular</item>
+        <item>@string/movie_topRated</item>
+    </string-array>
+</resources>
