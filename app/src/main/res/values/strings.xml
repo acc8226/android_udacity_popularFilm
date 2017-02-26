@@ -4,4 +4,9 @@
     <string name="action_refresh">刷新</string>
     <string name="film_detail">电影详情</string>
     <string name="prompt_noFilm">o(︶︿︶)o, 暂无简介</string>
+    <string name="movie_popular">最受欢迎</string>
+    <string name="movie_topRated">评分最高</string>
+
+    <string name="pref_film_sort_key" translatable="false">film_sort</string>
+
 </resources>
