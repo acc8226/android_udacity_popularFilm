@@ -3,6 +3,7 @@ package com.android.example.popularmovie;
 import android.app.Activity;
 import android.app.Fragment;
 import android.content.Context;
+import android.content.Intent;
 import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Bundle;
@@ -152,7 +153,8 @@ public class MainActivity extends AppCompatActivity {
             gridView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
                 @Override
                 public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
-                    DetailActivity.startActivity(mActivity, mAdapter.getItem(position));
+                    Intent intent = DetailActivity.newIntent(mActivity, mAdapter.getItem(position));
+                    startActivity(intent);
                 }
             });
             gridView.setOnScrollListener(new PicassoScrollListener(mActivity));
