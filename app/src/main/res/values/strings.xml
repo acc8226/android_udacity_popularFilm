@@ -3,4 +3,5 @@
     <string name="action_settings">设置</string>
     <string name="action_refresh">刷新</string>
     <string name="film_detail">电影详情</string>
+    <string name="prompt_noFilm">o(︶︿︶)o, 暂无简介</string>
 </resources>

@@ -176,6 +176,7 @@ public class MainActivity extends AppCompatActivity {
         @Override
         public void onDestroy() {
             this.cancelDownload();
+            mActivity = null;
             super.onDestroy();
         }
 
