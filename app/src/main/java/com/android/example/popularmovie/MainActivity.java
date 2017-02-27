@@ -1,176 +1,177 @@
 package com.android.example.popularmovie;
 
 import android.app.Activity;
+import android.app.DialogFragment;
 import android.app.Fragment;
+import android.app.FragmentManager;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Bundle;
+import android.preference.PreferenceManager;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
+import android.support.v4.widget.SwipeRefreshLayout;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
 import android.view.LayoutInflater;
-import android.view.Menu;
-import android.view.MenuInflater;
-import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.GridView;
 import android.widget.ImageView;
+import android.widget.Spinner;
 import android.widget.Toast;
 
 import com.android.example.popularmovie.entity.ResultsBean;
 import com.android.example.popularmovie.netutil.DownloadCallback;
 import com.android.example.popularmovie.netutil.DownloadUtil;
 import com.android.example.popularmovie.netutil.Result;
+import com.android.example.popularmovie.view.PicassoScrollListener;
+import com.android.example.popularmovie.view.ProgressFragment;
 import com.google.gson.Gson;
+import com.google.gson.JsonSyntaxException;
 import com.squareup.picasso.Picasso;
 
 import java.io.IOException;
+import java.net.ConnectException;
 import java.net.SocketTimeoutException;
 import java.net.URL;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.List;
 
-public class MainActivity extends AppCompatActivity {
+public class MainActivity extends AppCompatActivity implements AdapterView.OnItemSelectedListener {
 
+    private static final String TAG_FRAGMENT_FILM_LIST = "tag_fragment_film_list";
+
+    private SharedPreferences mSharedPreferences;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        mSharedPreferences = PreferenceManager.getDefaultSharedPreferences(this);
+        final CharSequence[] MOVIE_SORT_ARRAY = getResources().getTextArray(R.array.movie_sort_array);
+        final String[] FILM_URL = getResources().getStringArray(R.array.movie_sort_url_array);
         setContentView(R.layout.activity_main);
-
-
-        // Check that the activity is using the layout version with
-        // the fragment_container FrameLayout
-        if (findViewById(R.id.container) != null) {
-
-            // However, if we're being restored from a previous state,
-            // then we don't need to do anything and should return or else
-            // we could end up with overlapping fragments.
-            if (savedInstanceState != null) {
-                return;
-            }
-            // Create a new Fragment to be placed in the activity layout
-            FilmDisplayFragment filmDisplayFragment = FilmDisplayFragment.newInstance();
-            // In case this activity was started with special instructions from an
-            // Intent, pass the Intent's extras to the fragment as arguments
-            //firstFragment.setArguments(getIntent().getExtras());
-
-            // Add the fragment to the 'fragment_container' FrameLayout
-            getFragmentManager().beginTransaction()
-                    .add(R.id.container, filmDisplayFragment).commit();
-        }
 
         final Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
         if (toolbar == null)
             return;
         toolbar.setTitle(getTitle());
-
         setSupportActionBar(toolbar);
+
+        Spinner spinner = (Spinner) toolbar.findViewById(R.id.movie_sort_array);
+        // Create an ArrayAdapter using the string array and a default spinner layout
+        final ArrayAdapter<CharSequence> adapter =  new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, MOVIE_SORT_ARRAY);
+        // Specify the layout to use when the list of choices appears
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        // Apply the adapter to the spinner
+        spinner.setAdapter(adapter);
+        spinner.setOnItemSelectedListener(this);
+        final int selection = mSharedPreferences.getInt(getString(R.string.pref_film_sort_key), 0);
+        spinner.setSelection(selection);
+
+        // Check that the activity is using the layout version with the fragment_container FrameLayout
+        if (findViewById(R.id.container) != null) {
+            if (savedInstanceState != null) {
+                return;
+            }
+            // Create a new Fragment to be placed in the activity layout
+            FilmDisplayFragment filmDisplayFragment = FilmDisplayFragment.newInstance(FILM_URL);
+            // Add the fragment to the 'fragment_container' FrameLayout
+            getFragmentManager().beginTransaction()
+                    .add(R.id.container, filmDisplayFragment, TAG_FRAGMENT_FILM_LIST).commit();
+        }
     }
 
     @Override
-    public boolean onCreateOptionsMenu(Menu menu) {
-        // Inflate the menu; this adds items to the action bar if it is present.
-        getMenuInflater().inflate(R.menu.setting, menu);
-        return true;
+    public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+        //Toast.makeText(this, "write to sp" + position, Toast.LENGTH_SHORT).show();
+        // An item was selected. You can retrieve the selected item using
+        mSharedPreferences.edit().putInt(getString(R.string.pref_film_sort_key), position).apply();
+
+        //更改url, 并使fragment去刷新
+        FilmDisplayFragment fragment = (FilmDisplayFragment) getFragmentManager().findFragmentByTag(TAG_FRAGMENT_FILM_LIST);
+        if(fragment != null && fragment.isVisible()){
+            fragment.updateMovieInfo(position);
+        }
     }
 
     @Override
-    public boolean onOptionsItemSelected(MenuItem item) {
-        final int id = item.getItemId();
+    public void onNothingSelected(AdapterView<?> parent) {
 
-        if (id == R.id.action_settings) {
-            //startActivity(new Intent(this, SettingsActivity.class));
-            return true;
-        }
-        return super.onOptionsItemSelected(item);
     }
 
-    public static class FilmDisplayFragment extends Fragment implements DownloadCallback<String> {
+    public static class FilmDisplayFragment extends Fragment implements DownloadCallback<String>{
 
-        public static final String TAG = FilmDisplayFragment.class.getSimpleName();
+        private static final String FILM_URL_KEY = "film_url_key";
+        private static final String TAG_DIALOG = "dialog";
 
-        public static FilmDisplayFragment newInstance() {
-            return new FilmDisplayFragment();
-        }
-
+        private final Gson gson = new Gson();
+        private int mFilmIndex = 0;
+        private String[] mFilmUrl;
         /**
          * Boolean telling us whether a download is in progress
          */
         private boolean mDownloading = false;
-
-        private final Gson gson = new Gson();
-
-        private String mUrlString;
-
         private FetchMovieTask mTask;
-
         private Activity mActivity;
-
         private ArrayAdapter<ResultsBean.FilmBean> mAdapter;
+        private FragmentManager mFragmentManager;
 
-        public FilmDisplayFragment() {
-        }
+        private SwipeRefreshLayout mSwipeRefreshLayout;
+        private GridView mGridView;
 
+        public FilmDisplayFragment() {}
 
-        @Override
-        public void onAttach(Context context) {
-            super.onAttach(context);
+        public static FilmDisplayFragment newInstance(@Nullable String[] sequences) {
+            FilmDisplayFragment fragment = new FilmDisplayFragment();
+            Bundle bundle = new Bundle();
+            bundle.putStringArray(FILM_URL_KEY, sequences);
+            fragment.setArguments(bundle);
+            return fragment;
         }
 
         @Override
         public void onCreate(@Nullable Bundle savedInstanceState) {
             super.onCreate(savedInstanceState);
             mActivity = getActivity();
-
-            //TODO test
-            mUrlString = Constant.TOP_RATED;
-
-            // Add this line in order for this fragment to handle menu events.
-            setHasOptionsMenu(true);
-
+            mFragmentManager = getFragmentManager();
+            mFilmUrl = getArguments().getStringArray(FILM_URL_KEY);
             // Retain this Fragment across configuration changes in the host Activity.
             setRetainInstance(true);
-
         }
 
         @Override
         public View onCreateView(LayoutInflater inflater, ViewGroup container,
                                  Bundle savedInstanceState) {
             View rootView = inflater.inflate(R.layout.fragment_film_display, container, false);
-            GridView gridView = (GridView) rootView;
+            mSwipeRefreshLayout = (SwipeRefreshLayout) rootView.findViewById(R.id.swipe_layout);
+            mGridView = (GridView) rootView.findViewById(R.id.gridView);
+
+            mSwipeRefreshLayout.setOnRefreshListener(new SwipeRefreshLayout.OnRefreshListener() {
+                @Override
+                public void onRefresh() {
+                    FilmDisplayFragment.this.updateMovieInfo();
+                }
+            });
 
             mAdapter = new InnerGridViewAdapter(mActivity);
 
-            gridView.setAdapter(mAdapter);
-            gridView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
+            mGridView.setAdapter(mAdapter);
+            mGridView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
                 @Override
                 public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
                     Intent intent = DetailActivity.newIntent(mActivity, mAdapter.getItem(position));
                     startActivity(intent);
                 }
             });
-            gridView.setOnScrollListener(new PicassoScrollListener(mActivity));
+            mGridView.setOnScrollListener(new PicassoScrollListener(mActivity));
             return rootView;
-        }
-
-        @Override
-        public void onViewCreated(View view, Bundle savedInstanceState) {
-            super.onViewCreated(view, savedInstanceState);
-            this.updateMovieInfo();
-        }
-
-        @Override
-        public void onStart() {
-            super.onStart();
-            //this.updateMovieInfo();
         }
 
         @Override
@@ -181,38 +182,36 @@ public class MainActivity extends AppCompatActivity {
         }
 
         @Override
-        public void onCreateOptionsMenu(Menu menu, MenuInflater inflater) {
-            inflater.inflate(R.menu.refresh, menu);
-        }
-
-        @Override
-        public boolean onOptionsItemSelected(MenuItem item) {
-            final int id = item.getItemId();
-
-            if (id == R.id.action_refresh) {
-                this.updateMovieInfo();
-                return true;
-            }
-            return super.onOptionsItemSelected(item);
-        }
-
-
-        @Override
         public void onSuccess(String result) {
-            // Update your UI here based on result of download.
-            // New data is back from the server.
+            // Update your UI here based on result of download. New data is back from the server.
             if (result != null) {
-                ResultsBean resultsBean = gson.fromJson(result, ResultsBean.class);
-
-                List<ResultsBean.FilmBean> filmList = resultsBean.getResults();
-                mAdapter.clear();
-                mAdapter.addAll(filmList);
+                try {
+                    ResultsBean resultsBean = gson.fromJson(result, ResultsBean.class);
+                    List<ResultsBean.FilmBean> filmList = resultsBean.getResults();
+                    mAdapter.clear();
+                    mAdapter.addAll(filmList);
+                } catch (JsonSyntaxException e) {
+                    e.printStackTrace();
+                    Toast.makeText(mActivity, e.getMessage(), Toast.LENGTH_SHORT).show();
+                } finally {
+                    if(mSwipeRefreshLayout != null){
+                        mSwipeRefreshLayout.setRefreshing(false);
+                    }
+                    if(mGridView != null){
+                        mGridView.smoothScrollToPositionFromTop(0, 700);
+                    }
+                    this.dismissLoadingDialog();
+                }
             }
         }
 
         @Override
         public void onError(String errorString) {
             Toast.makeText(mActivity, errorString, Toast.LENGTH_SHORT).show();
+            if(mSwipeRefreshLayout != null){
+                mSwipeRefreshLayout.setRefreshing(false);
+            }
+            this.dismissLoadingDialog();
         }
 
         @Override
@@ -222,8 +221,25 @@ public class MainActivity extends AppCompatActivity {
 
         }
 
+        /**
+         * 直接刷新
+         */
         public void updateMovieInfo() {
             if (!mDownloading) {
+                // Execute the async download.
+                this.startDownload();
+                mDownloading = true;
+            }
+        }
+
+        /**
+         * 更改url导致的刷新
+         * @param index
+         */
+        public void updateMovieInfo(int index) {
+            if (!mDownloading) {
+                mFilmIndex = index;
+                this.showLoadingDialog();
                 // Execute the async download.
                 this.startDownload();
                 mDownloading = true;
@@ -236,7 +252,7 @@ public class MainActivity extends AppCompatActivity {
         private void startDownload() {
             this.cancelDownload();
             mTask = new FetchMovieTask();
-            mTask.execute(mUrlString);
+            mTask.execute(mFilmUrl[mFilmIndex]);
         }
 
         /**
@@ -245,6 +261,20 @@ public class MainActivity extends AppCompatActivity {
         private void cancelDownload() {
             if (mTask != null) {
                 mTask.cancel(true);
+            }
+        }
+
+        private void showLoadingDialog(){
+            if(mFragmentManager.findFragmentByTag(TAG_DIALOG) == null && this.isResumed()){
+                new ProgressFragment().show(mFragmentManager, TAG_DIALOG);
+            }
+        }
+
+        private void dismissLoadingDialog(){
+            DialogFragment dg;
+            if((dg = (DialogFragment) mFragmentManager.findFragmentByTag(TAG_DIALOG)) != null){
+                //fixed "Can not perform this action after onSaveInstanceState"
+                dg.dismissAllowingStateLoss();
             }
         }
 
@@ -261,7 +291,6 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public View getView(int position, View convertView, @NonNull ViewGroup parent) {
                 ImageView imageView = (ImageView) convertView;
-                ;
                 if (convertView == null) {
                     // if it's not recycled, initialize some attributes
                     imageView = new ImageView(context);
@@ -272,12 +301,11 @@ public class MainActivity extends AppCompatActivity {
                 final ResultsBean.FilmBean item = getItem(position);
 
                 // Trigger the download of the URL asynchronously into the image view.
-                Picasso.with(mActivity)
+                Picasso.with(context)
                         .load(Constant.IMAGE_BASE_URL.concat(item.backdropPath))
                         .placeholder(R.drawable.placeholder)
                         .tag(context)
                         .into(imageView);
-
                 return imageView;
             }
 
@@ -312,7 +340,6 @@ public class MainActivity extends AppCompatActivity {
                         result = new Result(e);
                     }
                 }
-
                 return result;
             }
 
@@ -325,6 +352,8 @@ public class MainActivity extends AppCompatActivity {
                             errorMsg = "与主机失联, 请检查网络";
                         } else if (result.mException instanceof SocketTimeoutException) {
                             errorMsg = "连接超时, 请检查网络";
+                        } else if (result.mException instanceof ConnectException) {
+                            errorMsg = "没有联网";
                         } else {
                             errorMsg = "网络连接失败, 请检查网络";
                         }

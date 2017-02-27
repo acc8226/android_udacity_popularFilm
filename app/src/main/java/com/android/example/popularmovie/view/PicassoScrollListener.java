@@ -1,4 +1,4 @@
-package com.android.example.popularmovie;
+package com.android.example.popularmovie.view;
 
 import android.content.Context;
 import android.widget.AbsListView;

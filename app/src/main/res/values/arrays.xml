@@ -3,4 +3,9 @@
         <item>@string/movie_popular</item>
         <item>@string/movie_topRated</item>
     </string-array>
+
+    <string-array name="movie_sort_url_array">
+        <item>@string/movie_popular_url</item>
+        <item>@string/movie_topRated_url</item>
+    </string-array>
 </resources>
