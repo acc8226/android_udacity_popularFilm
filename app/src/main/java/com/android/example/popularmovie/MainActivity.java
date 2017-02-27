@@ -24,6 +24,7 @@ import android.widget.ImageView;
 import android.widget.Spinner;
 import android.widget.Toast;
 
+import com.android.example.popularmovie.Util.CommonUtil;
 import com.android.example.popularmovie.Util.SharedPreferencesUtil;
 import com.android.example.popularmovie.entity.ResultsBean;
 import com.android.example.popularmovie.netutil.DownloadCallback;
@@ -93,6 +94,10 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
         //更改url, 并使fragment去刷新
         FilmDisplayFragment fragment = (FilmDisplayFragment) getFragmentManager().findFragmentByTag(TAG_FRAGMENT_FILM_LIST);
         if(fragment != null && fragment.isVisible()){
+            if(!CommonUtil.hasNetwork(this)){
+                Toast.makeText(this, "not has network", Toast.LENGTH_SHORT).show();
+                return;
+            }
             fragment.updateMovieInfo(position);
         }
     }
@@ -152,6 +157,11 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
             mSwipeRefreshLayout.setOnRefreshListener(new SwipeRefreshLayout.OnRefreshListener() {
                 @Override
                 public void onRefresh() {
+                    if(!CommonUtil.hasNetwork(mActivity)){
+                        mSwipeRefreshLayout.setRefreshing(false);
+                        Toast.makeText(mActivity, "not has network", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
                     FilmDisplayFragment.this.updateMovieInfo();
                 }
             });
