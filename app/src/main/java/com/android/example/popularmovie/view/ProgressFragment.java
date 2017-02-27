@@ -1,13 +1,9 @@
 package com.android.example.popularmovie.view;
 
+import android.app.Dialog;
 import android.app.DialogFragment;
+import android.app.ProgressDialog;
 import android.os.Bundle;
-import android.support.annotation.Nullable;
-import android.view.LayoutInflater;
-import android.view.View;
-import android.view.ViewGroup;
-
-import com.android.example.popularmovie.R;
 
 /**
  * Created by hp on 2017/2/26.
@@ -17,13 +13,13 @@ public class ProgressFragment extends DialogFragment{
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
+        //setStyle(DialogFragment.STYLE_NO_TITLE,0); 加上这句话报错, 看来我写的有点儿问题
         super.onCreate(savedInstanceState);
-        setStyle(DialogFragment.STYLE_NO_TITLE,0);
     }
 
-    @Nullable
     @Override
-    public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
-        return inflater.inflate(R.layout.dialog_progress, container, false);
+    public Dialog onCreateDialog(Bundle savedInstanceState) {
+        return ProgressDialog.show(getActivity(), "", "正在加载电影，请稍等...");
     }
+
 }
