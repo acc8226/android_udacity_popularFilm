@@ -9,6 +9,4 @@
     <string name="movie_topRated">评分最高</string>
     <string name="movie_topRated_url" translatable="false">http://api.themoviedb.org/3/movie/top_rated?language=zh</string>
 
-    <string name="pref_film_sort_key" translatable="false">film_sort</string>
-
 </resources>

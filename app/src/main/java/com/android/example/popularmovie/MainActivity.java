@@ -6,11 +6,9 @@ import android.app.Fragment;
 import android.app.FragmentManager;
 import android.content.Context;
 import android.content.Intent;
-import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Bundle;
-import android.preference.PreferenceManager;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.support.v4.widget.SwipeRefreshLayout;
@@ -26,6 +24,7 @@ import android.widget.ImageView;
 import android.widget.Spinner;
 import android.widget.Toast;
 
+import com.android.example.popularmovie.Util.SharedPreferencesUtil;
 import com.android.example.popularmovie.entity.ResultsBean;
 import com.android.example.popularmovie.netutil.DownloadCallback;
 import com.android.example.popularmovie.netutil.DownloadUtil;
@@ -48,12 +47,9 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
 
     private static final String TAG_FRAGMENT_FILM_LIST = "tag_fragment_film_list";
 
-    private SharedPreferences mSharedPreferences;
-
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        mSharedPreferences = PreferenceManager.getDefaultSharedPreferences(this);
         final CharSequence[] MOVIE_SORT_ARRAY = getResources().getTextArray(R.array.movie_sort_array);
         final String[] FILM_URL = getResources().getStringArray(R.array.movie_sort_url_array);
         setContentView(R.layout.activity_main);
@@ -72,7 +68,7 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
         // Apply the adapter to the spinner
         spinner.setAdapter(adapter);
         spinner.setOnItemSelectedListener(this);
-        final int selection = mSharedPreferences.getInt(getString(R.string.pref_film_sort_key), 0);
+        final int selection = SharedPreferencesUtil.getMovieSort(this);
         spinner.setSelection(selection);
 
         // Check that the activity is using the layout version with the fragment_container FrameLayout
@@ -92,7 +88,7 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
     public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
         //Toast.makeText(this, "write to sp" + position, Toast.LENGTH_SHORT).show();
         // An item was selected. You can retrieve the selected item using
-        mSharedPreferences.edit().putInt(getString(R.string.pref_film_sort_key), position).apply();
+        SharedPreferencesUtil.putMovieSort(this, position);
 
         //更改url, 并使fragment去刷新
         FilmDisplayFragment fragment = (FilmDisplayFragment) getFragmentManager().findFragmentByTag(TAG_FRAGMENT_FILM_LIST);
